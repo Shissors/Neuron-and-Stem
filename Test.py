@@ -5,7 +5,9 @@ import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy import stats
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+
 
 
 df_stem = pd.read_csv("GSE60905_series_matrix.txt", comment="!", sep="\t", index_col=0)
@@ -25,43 +27,54 @@ df_combined_reset = df_combined.T
 df_combined_reset['condition'] = df_combined_reset.index.map(metadata_reset['condition'])
 df_genes=df_combined_reset
 
+conditions = df_genes['condition']
+df_pca = df_genes.drop(columns=['condition'])
+scaler = StandardScaler()
+scaled_data = scaler.fit_transform(df_pca)
+pca = PCA(n_components=2)
+pca_results = pca.fit_transform(scaled_data)
+pca_df = pd.DataFrame(pca_results, columns=["PC1", "PC2"])
+pca_df["condition"] = df_genes["condition"].values
+print(pca_df)
 
-df_long = pd.melt(df_genes.iloc[:, :-1].T, var_name="Sample", value_name="Expression Level")
-df_long["condition"] = df_long["Sample"].map(df_genes["condition"])
+plt.figure(figsize=(8, 6))
+sns.scatterplot(data=pca_df, x="PC1", y="PC2", hue="condition", palette="Set1", alpha=0.8)
+plt.axhline(0, color="gray", linestyle="--")
+plt.axvline(0, color="gray", linestyle="--")
+plt.title("PCA of Gene Expression Data")
+plt.xlabel("Principal Component 1 (PC1)")
+plt.ylabel("Principal Component 2 (PC2)")
+plt.legend(title="Condition")
+plt.tight_layout()
+plt.savefig("PCA.png", dpi=300)
+
+df_genes['condition_encoded'] = df_genes['condition'].map({'stem': 0, 'neuron': 1})
+df_dea = df_genes.drop(columns=['condition'])
+
+results = []
+for gene in df_dea.columns:
+    gene_expression = df_dea[gene]
+    gene_expression = pd.to_numeric(gene_expression, errors='coerce').dropna()
+    conditions_aligned = df_genes['condition_encoded'].loc[gene_expression.index]
+    X = pd.DataFrame({'condition': conditions_aligned})
+    X = sm.add_constant(X)
+
+    model = sm.OLS(gene_expression, X)
+    results_gene = model.fit()
+    p_value = results_gene.pvalues['condition']
+    results.append([gene, p_value])
+results_df = pd.DataFrame(results, columns=['Gene', 'p_value'])
+results_df['fdr'] = multipletests(results_df['p_value'], method='fdr_bh')[1]
+significant_genes = results_df[results_df['fdr'] < 0.05]
+print(significant_genes)
 
 
-
-plt.figure(figsize=(12, 5))
-sns.boxplot(data=df_long, x="Sample", y="Expression Level", hue="condition", palette="Set2")
-plt.xticks([])
-plt.title("Expression Distribution Across Samples")
-plt.savefig("Boxplots of expression and samples.png", dpi=300)
-
-print(df_genes)
-
+mean_stem = df_stem.mean(axis=1)
+mean_neuron = df_neuron.mean(axis=1)
+log2_fold_change = np.log2(mean_neuron / mean_stem)
+significant_genes_sorted = significant_genes.sort_values(by='p_value')
+mean_stem = df_stem.mean(axis=1)
+mean_neuron = df_neuron.mean(axis=1)
+log2_fold_change = np.log2(mean_neuron / mean_stem)
 
 
-
-def one_sample_ttest(row, condition_data):#does the same t tests for rsv samples
-    condition_values=row[condition_data]
-    t_stat, p_value = stats.ttest_1samp(condition_values, 0, nan_policy="omit")
-    return p_value
-
-df_stem = df_genes[df_genes["condition"] == "stem"]
-df_neuron = df_genes[df_genes["condition"] == "neuron"]
-
-
-results_stem = []
-results_neuron = []
-
-for gene in df_stem.columns[:-1]:  # Exclude the 'condition' column
-    p_value = one_sample_ttest(df_stem[gene], df_stem)
-    results_stem.append([gene, p_value])
-
-
-for gene in df_neuron.columns[:-1]:  # Exclude the 'condition' column
-    p_value = one_sample_ttest(df_neuron[gene], df_neuron)
-    results_neuron.append([gene, p_value])
-
-results_stem_df = pd.DataFrame(results_stem, columns=["Gene", "p-value"])
-results_neuron_df = pd.DataFrame(results_neuron, columns=["Gene", "p-value"])
