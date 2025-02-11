@@ -67,14 +67,5 @@ results_df = pd.DataFrame(results, columns=['Gene', 'p_value'])
 results_df['fdr'] = multipletests(results_df['p_value'], method='fdr_bh')[1]
 significant_genes = results_df[results_df['fdr'] < 0.05]
 print(significant_genes)
-
-
-mean_stem = df_stem.mean(axis=1)
-mean_neuron = df_neuron.mean(axis=1)
-log2_fold_change = np.log2(mean_neuron / mean_stem)
-significant_genes_sorted = significant_genes.sort_values(by='p_value')
-mean_stem = df_stem.mean(axis=1)
-mean_neuron = df_neuron.mean(axis=1)
-log2_fold_change = np.log2(mean_neuron / mean_stem)
-
+print(pca_df)
 
