@@ -126,35 +126,33 @@ selected_row_n = df_finaln.loc["mean expression neuron"]
 selected_row_s=df_final.loc["mean expression stem"]
 df_combined.loc["mean expression stem"]=selected_row_s
 df_combined.loc["mean expression neuron"]=selected_row_n
-print(df_combined)
 df_combined=df_combined.T
 
+meta_df=meta_df.reset_index()
+meta_df_stem=meta_df[meta_df["condition"]=="stem"]
+ID_stem=meta_df_stem["index"].tolist()
 
-def calculate_log2fc(row):
-    try:
-        # You can modify this to handle NaNs or infinite values if needed
-        return np.log2(row['mean expression neuron'] / row['mean expression stem'])
-    except ZeroDivisionError:
-        # Handle cases where division by zero happens
-        return np.nan
+meta_df_neuron=meta_df[meta_df["condition"]=="neuron"]
+ID_neuron=meta_df_neuron["index"].tolist()
+df_no_mean= df_combined.iloc[:, :-2]
+df_no_mean= df_no_mean.drop(df_no_mean.index[-3:])
+df_o_stem=df_combined[ID_stem]
+df_o_neuron=df_combined[ID_neuron]
+ID_combined=pd.concat([df_o_stem,df_o_neuron], axis=1)
+print(ID_combined)
 
-# Apply the function to each row (axis=1 means row-wise)
-df_combined['log2FC'] = df_combined.apply(calculate_log2fc, axis=1)
 
-print(df_combined['mean expression neuron'].isna().sum())
-print(df_combined['mean expression stem'].isna().sum())
-df_combined = df_combined.dropna(subset=['mean expression neuron', 'mean expression stem'])
 
-def calculate_ttest(row):
-    # Extracting expression values for neurons and stem cells for the gene
-    neuron_values = row['mean expression neuron']
-    
-    # Perform t-test between neuron and stem cell expression
-    t_stat, p_value = stats.ttest_ind(neuron_values, stem_values)
+def two_sample_t_test(row):
+    stem_values=row[ID_stem]
+    neuron_values=row[ID_neuron]
+    t_stat, p_value=stats.ttest_ind(neuron_values, stem_values, nan_policy="omit")
     return p_value
+df_combined["p_value"]=df_no_mean.apply(two_sample_t_test, axis=1)
+_, fdr_values, _, _=multipletests(df_combined["p_value"], method="fdr_bh")
+df_combined["fdr values"]=fdr_values
 
-# Apply the function to each row
-df_combined['p_value'] = df_combined.apply(calculate_ttest, axis=1)
 
-# Now df_combined will have a new column 'p_value' with the p-values of the t-tests
-print(df_combined)
+df_log_neuron=df_combined[ID_neuron]
+df_log_stem=df_combined[ID_stem]
+df_combined["mean log ratio"]=df_log_neuron.mean(axis=1)-df_log_stem.mean(axis=1)
