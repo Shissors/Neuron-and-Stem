@@ -56,10 +56,26 @@ fig.write_html("top_10_genes_plot.html")
 
 col=["ID","Gene Symbol", "Gene Ontology Biological Process", "Gene Ontology Cellular Component","Gene Ontology Molecular Function"]
 df_gpl=df_gpl[col]
-print(df_gpl)
 
 gene_id_list = top_10_genes['gene_name'].tolist()
-print(gene_id_list)
 
 matching_rows = df_gpl[df_gpl['ID'].isin(gene_id_list)]
-print(matching_rows)
+
+
+heatmap_data = df_stem_subset.loc[top_10_genes.index].join(df_neuron_subset.loc[top_10_genes.index])
+
+if 'gene_name' in top_10_genes.columns:
+    heatmap_data.index = top_10_genes['gene_name'].values
+
+fig = px.imshow(
+    heatmap_data,
+    labels=dict(x="Samples", y="Genes", color="Expression"),
+    x=heatmap_data.columns,
+    y=heatmap_data.index,
+    color_continuous_scale="viridis"
+)
+fig.update_layout(title="Heatmap of Top 10 Most Significant Genes", autosize=False, width=800, height=600)
+fig.write_html("heatmap.html")
+matching_rows.to_csv("matching_genes.tsv", sep="\t", index=False)
+   
+    
